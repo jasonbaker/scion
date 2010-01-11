@@ -39,6 +39,9 @@ def eval_sexp(sexp, c):
         atom(sexp, c)
 
 def funcall(sexp, c):
+    """
+    Evaluate a function call.
+    """
     func_name = sexp.pop(0)
     if func_name == 'print':
         for subsexp in sexp:
@@ -57,6 +60,9 @@ def funcall(sexp, c):
         c( assem.Call( assem.Local(func_name), sexp))
 
 def binary_op(op, sexp, c):
+    """
+    Evaluate a binary operator.
+    """
     op_mapping = {
         '+' : c.BINARY_ADD,
         '-' : c.BINARY_SUBTRACT,
@@ -74,24 +80,42 @@ def binary_op(op, sexp, c):
         op_mapping[op]()
 
 def atom(sexp, c):
+    """
+    Evaluate an atomic s-expression.
+    """
     c.LOAD_CONST(sexp)
 
 def string(sexp, c):
+    """
+    Evaluate a string.
+    """
     sexp = sexp.strip('"\'').rstrip('"\'')
     atom(sexp, c)
 
 def assign(sexp, c):
+    """
+    Handle the = form.
+    """
     var_name, value = sexp
     eval_sexp(value, c)
     c( assem.LocalAssign(var_name) )
 
-def is_string(sexp):    
+def is_string(sexp):
+    """
+    Determine whether this s-expression is a string or an identifier.
+    """
     return sexp.startswith('"') and sexp.endswith('"')
 
 def variable(sexp, c):
+    """
+    Handle a variable lookup.
+    """
     c( assem.Local(sexp) )
 
 def if_stmt(sexp, c):
+    """
+    Handle an if statement.
+    """
     skip = assem.Label()
     eval_sexp(sexp[0], c)
     forward = c.JUMP_IF_FALSE()
@@ -105,6 +129,9 @@ def if_stmt(sexp, c):
     c( skip )
 
 def def_stmt(sexp, c):
+    """
+    Handle a function definition.
+    """
     sub_block = c.nested()
     name = sexp[0]
     sub_block.co_name = name
