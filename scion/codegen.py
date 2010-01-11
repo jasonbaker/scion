@@ -1,34 +1,44 @@
+from copy import copy
+from dis import dis
+
 import peak.util.assembler as assem
 
-from copy import copy
+from scion.options import get_dis_printer
+from scion.parse import list_sexp
 
-from options import get_dis_printer
+dis = None
 
 def eval_toplevel(sexps, args):
+    """
+    Evaluate the code from an AST.
+    """
+    global dis
     dis = get_dis_printer(args)
     c = assem.Code()
     for sexp in sexps:
         eval_sexp(sexp, c)
-    if c.stack_size == 0:
-        c.LOAD_CONST(None)
-    c.RETURN_VALUE()
-    dis(c.code())
+    return_val(c)
+
+    dis(c.code(), 'Toplevel function:')
     locals_dict = copy(locals())
     locals_dict['foo-bar'] = 1
     exec(c.code(), globals(), locals())
 
 def eval_sexp(sexp, c):
+    """
+    Recursively evaluate an s-expression.
+    """
     if isinstance(sexp, str):
         if is_string(sexp):
             string(sexp, c)
         else:
             variable(sexp, c)
     elif isinstance(sexp, list):
-        func(sexp, c)
+        funcall(sexp, c)
     elif isinstance(sexp, (int, float, str)):
         atom(sexp, c)
 
-def func(sexp, c):
+def funcall(sexp, c):
     func_name = sexp.pop(0)
     if func_name == 'print':
         for subsexp in sexp:
@@ -39,8 +49,12 @@ def func(sexp, c):
         binary_op(func_name, sexp, c)
     elif func_name == '=':
         assign(sexp, c)
+    elif func_name == 'if':
+        if_stmt(sexp, c)
+    elif func_name == 'def':
+        def_stmt(sexp, c)
     else:
-        c( assem.Call( assem.Global(func_name), sexp))
+        c( assem.Call( assem.Local(func_name), sexp))
 
 def binary_op(op, sexp, c):
     op_mapping = {
@@ -76,3 +90,49 @@ def is_string(sexp):
 
 def variable(sexp, c):
     c( assem.Local(sexp) )
+
+def if_stmt(sexp, c):
+    skip = assem.Label()
+    eval_sexp(sexp[0], c)
+    forward = c.JUMP_IF_FALSE()
+    c.POP_TOP()
+    eval_sexp(sexp[1], c)
+    c( skip.JUMP_FORWARD )
+    forward()
+    c.POP_TOP()
+    eval_sexp(sexp[2], c)
+    c( skip.JUMP_FORWARD )
+    c( skip )
+
+def def_stmt(sexp, c):
+    sub_block = c.nested()
+    name = sexp[0]
+    sub_block.co_name = name
+    args = sexp[1]
+    sub_block.co_argcount=len(args)
+    sub_block.co_varnames = args
+    # Unpack the code out of the list
+    sub_block_code, = sexp[2:]
+    eval_sexp(sub_block_code, sub_block)
+    return_val(sub_block)
+    dis(sub_block.code(), 'Function %s:' % name)
+    print
+    c.LOAD_CONST(sub_block.code())
+    c.MAKE_FUNCTION(0)
+    c( assem.LocalAssign(name) )
+
+def return_val(c):
+    """
+    Return a value from code c.  This will return None if there
+    is nothing on the return stack.  If there is more than one item
+    on the return stack, pop it down to one.
+
+    TODO:  Verify that this is the correct behavior if there is more
+    than one item on the stack.
+    """
+    if not c.stack_size:
+        c.LOAD_CONST(None)
+    elif c.stack_size > 1:
+        for i in xrange(c.stack_size):
+            c.POP_TOP()
+    c.RETURN_VALUE()

@@ -11,6 +11,5 @@ parser.add_argument('-d', '--dis', action='store_true', default=False,
 def main():
     args = parser.parse_args()
     ast = get_syntax_tree(args.infile)
-    print ast
     eval_toplevel(ast, args)
     

@@ -27,3 +27,5 @@ def test_var():
 def test_none():
     result = get_syntax_tree_from_str('nil')
     assert result.asList() == [None]
+
+
